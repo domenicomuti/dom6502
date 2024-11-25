@@ -77,14 +77,14 @@ void handle_addressing(uint8_t mode, uint8_t **operand, bool *page_crossed) {
     }
     else if (mode == ZPX) {
         /*  Zero Page Indexed addressing, X:
-            tue effective address is calculated by adding the second byte to
+            the effective address is calculated by adding the second byte to
             the content of the X register. The content of second byte reference
             a location in page zero.  */
         *operand = &ram[ram[pc + 1] + xr];
     }
     else if (mode == ZPY) {
         /*  Zero Page Indexed addressing, Y:
-            tue effective address is calculated by adding the second byte to
+            the effective address is calculated by adding the second byte to
             the contents of the Y register. The content of second byte reference
             a location in page zero.  */
         *operand = &ram[ram[pc + 1] + yr];
@@ -108,14 +108,13 @@ void handle_addressing(uint8_t mode, uint8_t **operand, bool *page_crossed) {
             address contained in the second and third bytes of the instruction.  */
         *operand = &ram[((ram[pc + 2] << 8) | (ram[pc + 1])) + yr];
     }
-    else if (mode == REL) {
+    //else if (mode == REL) {
         /*  Relative addressing:
             the second byte of the instruction becomes the operand which is an "Offset"
             added to the contents of the lower eight bits of the program counter when
             the counter is set at the next instruction. The range of the offset is
             -128 to +127 bytes from the next instruction.  */
-        //pc += (ram[pc + 1] - 126);
-    }
+    //}
     else if (mode == INX) {
         /*  Zero Page Indexed Indirect addressing (Indirect X):
             the second byte of the instruction is added to the contents of the X
@@ -206,7 +205,20 @@ void adc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else {
         ac = (uint8_t)binary_operation;
 
-        if ((ac >> 7) != (ac_orig >> 7))
+        /*  positive + positive = negative OR 
+            negative + negative = positive  */
+        bool overflow = (
+            (ac_orig >> 7) &&
+            (*operand >> 7) &&
+            ((ac >> 7) == 0)
+        ) ||
+        (
+            ((ac_orig >> 7) == 0) &&
+            ((*operand >> 7) == 0) &&
+            (ac >> 7)
+        );
+
+        if (overflow)
             sr |= S_OVERFLOW;
         else sr &= ~S_OVERFLOW;
 
@@ -287,7 +299,10 @@ void bcc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
 	pc += bytes;
+    if ((sr & S_CARRY) == 0)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void bcs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -298,7 +313,10 @@ void bcs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-	pc += bytes;
+	
+    pc += bytes;
+    if (sr & S_CARRY)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void beq(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -309,7 +327,10 @@ void beq(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
 	pc += bytes;
+    if (sr & S_ZERO)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void bit(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -349,7 +370,10 @@ void bmi(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
 	pc += bytes;
+    if (sr & S_NEGATIVE)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void bne(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -360,7 +384,10 @@ void bne(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
 	pc += bytes;
+    if ((sr & S_ZERO) == 0)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void bpl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -416,7 +443,6 @@ void clc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     sr &= ~S_CARRY;
-
 	pc += bytes;
 }
 
@@ -429,7 +455,6 @@ void cld(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     sr &= ~S_DECIMAL;
-
 	pc += bytes;
 }
 
@@ -440,6 +465,8 @@ void cli(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    sr &= ~S_INT_DIS;
 	pc += bytes;
 }
 
@@ -450,6 +477,8 @@ void clv(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    sr &= ~S_OVERFLOW;
 	pc += bytes;
 }
 
@@ -501,6 +530,8 @@ void dex(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    xr--;
 	pc += bytes;
 }
 
@@ -511,6 +542,8 @@ void dey(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    yr--;
 	pc += bytes;
 }
 
@@ -542,6 +575,8 @@ void inx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    xr++;
 	pc += bytes;
 }
 
@@ -552,6 +587,8 @@ void iny(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    yr++;
 	pc += bytes;
 }
 
@@ -601,7 +638,6 @@ void lda(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 
     uint8_t *operand = NULL; bool page_crossed;
     handle_addressing(mode, &operand, &page_crossed);    
-
     ac = *operand;
 	pc += bytes;
 }
@@ -618,7 +654,6 @@ void ldx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     uint8_t *operand = NULL; bool page_crossed;
     handle_addressing(mode, &operand, &page_crossed);
     xr = *operand;
-
 	pc += bytes;
 }
 
@@ -634,7 +669,6 @@ void ldy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     uint8_t *operand = NULL; bool page_crossed;
     handle_addressing(mode, &operand, &page_crossed);
     yr = *operand;
-
 	pc += bytes;
 }
 
@@ -655,6 +689,7 @@ void nop(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
 	pc += bytes;
 }
 
@@ -760,9 +795,10 @@ void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 
     uint8_t *operand = NULL; bool page_crossed;
     handle_addressing(mode, &operand, &page_crossed);
+    int8_t operand_i = (int8_t)*operand;
 
     uint8_t carry_orig = (sr & S_CARRY);
-    int16_t binary_operation = (int8_t)ac - *operand - !carry_orig;
+    int16_t binary_operation = (int8_t)ac - operand_i - !carry_orig;
 
     uint8_t ac_bin = (uint8_t)binary_operation;
 
@@ -770,7 +806,7 @@ void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
         sr |= S_CARRY;
     else sr &= ~S_CARRY;
 
-    if (binary_operation <= -127 || binary_operation >= 128)
+    if (binary_operation < -128 || binary_operation > 127)
         sr |= S_OVERFLOW;
     else sr &= ~S_OVERFLOW;
 
@@ -783,10 +819,10 @@ void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     if (sr & S_DECIMAL) {
-        int8_t t = (ac & 0x0F) - (*operand & 0x0F) - !carry_orig;
+        int8_t t = (ac & 0x0F) - (operand_i & 0x0F) - !carry_orig;
         if (t < 0)
             t = ((t - 0x06) & 0x0F) - 0x10;
-        int16_t _ac = (ac & 0xF0) - (*operand & 0xF0) + t;
+        int16_t _ac = (ac & 0xF0) - (operand_i & 0xF0) + t;
         if (_ac < 0)
             _ac -= 0x60;
         ac = (int8_t)_ac;
@@ -807,7 +843,6 @@ void sec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     sr |= S_CARRY;
-
 	pc += bytes;
 }
 
@@ -820,7 +855,6 @@ void sed(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     sr |= S_DECIMAL;
-
 	pc += bytes;
 }
 
@@ -831,6 +865,8 @@ void sei(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    sr |= S_INT_DIS;
 	pc += bytes;
 }
 

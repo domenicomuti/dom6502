@@ -117,6 +117,32 @@ int main() {
 
 	reset_pc();
 	reset_status();
+	a_lda(0xFF, IMM);
+	a_adc(0x01, IMM);
+	run_6502();
+	assert_reg_equals(&ac, 0x00, "adc [5a]");
+	assert_reg_equals(&sr, 0x33, "adc [5b]");
+
+	reset_pc();
+	reset_status();
+	a_sec();
+	a_lda(0x3F, IMM);
+	a_adc(0x40, IMM);
+	run_6502();
+	assert_reg_equals(&ac, 0x80, "adc [6a]");
+	assert_reg_equals(&sr, 0xF0, "adc [6b]");
+
+	reset_pc();
+	reset_status();
+	a_sec();
+	a_lda(0x7F, IMM);
+	a_adc(0x7F, IMM);
+	run_6502();
+	assert_reg_equals(&ac, 0xFF, "adc [7a]");
+	assert_reg_equals(&sr, 0xF0, "adc [7b]");
+
+	reset_pc();
+	reset_status();
 	a_sec();
 	a_lda(0x00, IMM);
 	a_sbc(0x01, IMM);
@@ -141,15 +167,6 @@ int main() {
 	run_6502();
 	assert_reg_equals(&ac, 0x80, "sbc [3a]");
 	assert_reg_equals(&sr, 0xF0, "sbc [3b]");
-
-	reset_pc();
-	reset_status();
-	a_sec();
-	a_lda(0x3F, IMM);
-	a_adc(0x40, IMM);
-	run_6502();
-	assert_reg_equals(&ac, 0x80, "adc [5a]");
-	assert_reg_equals(&sr, 0xF0, "adc [5b]");
 
 	reset_pc();
 	reset_status();
@@ -330,8 +347,31 @@ int main() {
 	ram[0x0001] = 0xF0;
 	a_bit(0x01, ZP_);
 	run_6502();
-	assert_reg_equals(&sr, 0xF0, "bit [1]");
+	assert_reg_equals(&sr, 0xF0, "bit [2]");
 	// end: and, asl, bit
+
+	// start: bcc
+	reset_pc();
+	reset_status();
+	a_lda(0x12, IMM);
+	a_bcc(0x02);   // +2
+	a_lda(0x13, IMM);
+	a_brk();
+	run_6502();
+	assert_reg_equals(&ac, 0x12, "bcc [1]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xFD, IMM);
+	a_adc(0x01, IMM);
+	a_bcc(0xFC);   // -4
+	a_brk();
+	run_6502();
+	assert_reg_equals(&ac, 0x00, "bcc [2a]");
+	assert_reg_equals(&sr, 0x33, "bcc [2b]");
+
+	// todo: test bcs, beq, bmi, bne
+	// end: bcc
 
     return 0;
 }

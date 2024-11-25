@@ -602,19 +602,9 @@ void a_txa() {
 	ram[pc++] = 0x8A;
 }
 
-void a_bcc(uint16_t operand, uint8_t mode) {
-	uint8_t opcode;
-	uint8_t bytes;
-	switch (mode) {
-		case REL:
-			opcode = 0x90;
-			bytes = 2;
-			break;
-		default:
-			printf("%sERROR %s%s\n", COLOR_RED, __func__, COLOR_RESET);
-			return;
-	}
-	ram[pc] = opcode;
+void a_bcc(uint16_t operand) {
+	uint8_t bytes = 2;
+	ram[pc] = 0x90;
 	write_ram(bytes, operand);
 	pc += bytes;
 }
