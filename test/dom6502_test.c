@@ -370,8 +370,126 @@ int main() {
 	assert_reg_equals(&ac, 0x00, "bcc [2a]");
 	assert_reg_equals(&sr, 0x33, "bcc [2b]");
 
-	// todo: test bcs, beq, bmi, bne
+	// todo: test bcs, beq, bmi, bne, bpl, bvs
 	// end: bcc
+
+
+	// start: cmp
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_cmp(0xFF, IMM);
+	run_6502();
+	assert_reg_equals(&sr, 0x33, "cmp [1]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_cmp(0xF0, IMM);
+	run_6502();
+	assert_reg_equals(&sr, 0x31, "cmp [2]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xF0, IMM);
+	a_cmp(0xFF, IMM);
+	run_6502();
+	assert_reg_equals(&sr, 0xB0, "cmp [3]");
+	// end: cmp
+
+
+	// start: dec
+	reset_pc();
+	reset_status();
+	ram[0x0001] = 0x7F;
+	a_dec(0x01, ZP_);
+	run_6502();
+	assert_reg_equals(&sr, 0x30, "dec [1a]");
+	assert_reg_equals(&ram[0x0001], 0x7E, "dec [1b]");
+
+	reset_pc();
+	reset_status();
+	ram[0x0001] = 0x01;
+	a_dec(0x01, ZP_);
+	run_6502();
+	assert_reg_equals(&sr, 0x32, "dec [2a]");
+	assert_reg_equals(&ram[0x0001], 0x00, "dec [2b]");
+
+	reset_pc();
+	reset_status();
+	ram[0x0001] = 0x00;
+	a_dec(0x01, ZP_);
+	run_6502();
+	assert_reg_equals(&sr, 0xB0, "dec [3a]");
+	assert_reg_equals(&ram[0x0001], 0xFF, "dec [3b]");
+	// end: dec
+
+
+	// start: eor
+	reset_pc();
+	reset_status();
+	a_lda(0xAA, IMM);
+	a_eor(0x55, IMM);
+	run_6502();
+	assert_reg_equals(&ac, 0xFF, "eor [1a]");
+	assert_reg_equals(&sr, 0xB0, "eor [1b]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_eor(0xFF, IMM);
+	run_6502();
+	assert_reg_equals(&ac, 0x00, "eor [2a]");
+	assert_reg_equals(&sr, 0x32, "eor [2b]");
+	// end: eor
+
+	// TODO test jsr
+
+
+	// start: rol, ror
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_rol(0, ACC);
+	run_6502();
+	assert_reg_equals(&ac, 0xFE, "rol [1a]");
+	assert_reg_equals(&sr, 0xB1, "rol [1b]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_rol(0, ACC);
+	a_rol(0, ACC);
+	run_6502();
+	assert_reg_equals(&ac, 0xFD, "rol [2a]");
+	assert_reg_equals(&sr, 0xB1, "rol [2b]");
+
+	reset_pc();
+	reset_status();
+	a_sec();
+	a_lda(0xFF, IMM);
+	a_rol(0, ACC);
+	run_6502();
+	assert_reg_equals(&ac, 0xFF, "rol [3a]");
+	assert_reg_equals(&sr, 0xB1, "rol [3b]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_ror(0, ACC);
+	run_6502();
+	assert_reg_equals(&ac, 0x7F, "ror [1a]");
+	assert_reg_equals(&sr, 0x31, "ror [1b]");
+
+	reset_pc();
+	reset_status();
+	a_lda(0xFF, IMM);
+	a_ror(0, ACC);
+	a_ror(0, ACC);
+	run_6502();
+	assert_reg_equals(&ac, 0xBF, "ror [1a]");
+	assert_reg_equals(&sr, 0xB1, "ror [1b]");
+	// end: rol, ror
 
     return 0;
 }

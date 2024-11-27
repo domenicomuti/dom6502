@@ -10,7 +10,7 @@
 uint8_t ram[65536];
 
 uint16_t pc = 0;
-uint8_t sp = 0;
+uint8_t sp = 0xFF;
 uint8_t ac;
 uint8_t xr;
 uint8_t yr;
@@ -398,7 +398,10 @@ void bpl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
 	pc += bytes;
+    if ((sr & S_NEGATIVE) == 0)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void brk(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -420,7 +423,10 @@ void bvc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-	pc += bytes;
+	
+    pc += bytes;
+    if ((sr & S_OVERFLOW) == 0)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void bvs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -431,7 +437,10 @@ void bvs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-	pc += bytes;
+	
+    pc += bytes;
+    if (sr & S_OVERFLOW)
+        pc += (int8_t)(ram[pc - 1]);
 }
 
 void clc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -490,6 +499,24 @@ void cmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    int8_t operation = ac - *operand;
+
+    if (operation == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
+    if (operation >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (operation >= 0)
+        sr |= S_CARRY;
+    else sr &= ~S_CARRY;
+
 	pc += bytes;
 }
 
@@ -500,6 +527,24 @@ void cpx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    int8_t operation = xr - *operand;
+
+    if (operation == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
+    if (operation >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (operation >= 0)
+        sr |= S_CARRY;
+    else sr &= ~S_CARRY;
+
 	pc += bytes;
 }
 
@@ -510,6 +555,24 @@ void cpy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    int8_t operation = yr - *operand;
+
+    if (operation == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
+    if (operation >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (operation >= 0)
+        sr |= S_CARRY;
+    else sr &= ~S_CARRY;
+
 	pc += bytes;
 }
 
@@ -520,6 +583,20 @@ void dec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+    
+    (*operand)--;
+
+    if (*operand >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (*operand == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -532,6 +609,15 @@ void dex(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     xr--;
+
+    if (xr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (xr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -544,6 +630,15 @@ void dey(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     yr--;
+
+    if (yr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (yr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+    
 	pc += bytes;
 }
 
@@ -555,6 +650,20 @@ void eor(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    ac ^= *operand;
+
+    if (ac >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (ac == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -565,6 +674,20 @@ void inc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+    
+    (*operand)++;
+
+    if (*operand >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (*operand == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -575,8 +698,17 @@ void inx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-
+    
     xr++;
+
+    if (xr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (xr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -589,6 +721,15 @@ void iny(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     yr++;
+
+    if (yr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (yr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -612,9 +753,7 @@ void jmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
         uint16_t p = (ram[pc + 2] << 8) | (ram[pc + 1]);
         pc = ((ram[p + 1] << 8) | ram[p]);
     }
-    else {
-        pc = (ram[pc + 2] << 8) | (ram[pc + 1]);
-    }
+    else pc = (ram[pc + 2] << 8) | (ram[pc + 1]);
 }
 
 void jsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -624,7 +763,12 @@ void jsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-	pc += bytes;
+
+    uint16_t _pc = pc + 2;
+    ram[0x0100 + sp--] = (_pc & 0xFF00) >> 8;
+    ram[0x0100 + sp--] = _pc & 0x00FF;
+
+    pc = (ram[pc + 2] << 8) | ram[pc + 1];
 }
 
 void lda(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -637,8 +781,18 @@ void lda(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);    
+    handle_addressing(mode, &operand, &page_crossed);
+    
     ac = *operand;
+
+    if (ac >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (ac == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -653,7 +807,17 @@ void ldx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 
     uint8_t *operand = NULL; bool page_crossed;
     handle_addressing(mode, &operand, &page_crossed);
+    
     xr = *operand;
+
+    if (xr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (xr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -668,7 +832,17 @@ void ldy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 
     uint8_t *operand = NULL; bool page_crossed;
     handle_addressing(mode, &operand, &page_crossed);
+    
     yr = *operand;
+
+    if (yr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (yr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -679,6 +853,23 @@ void lsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    uint8_t carry = *operand & 1;
+    *operand = (*operand) >> 1;
+
+    sr &= ~S_NEGATIVE;
+
+    if (*operand == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
+    if (carry)
+        sr |= S_CARRY;
+    else sr &= ~S_CARRY;
+
 	pc += bytes;
 }
 
@@ -701,6 +892,20 @@ void ora(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    ac |= *operand;
+
+    if (ac >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (ac == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -711,6 +916,8 @@ void pha(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    ram[0x0100 + sp--] = ac;
 	pc += bytes;
 }
 
@@ -721,6 +928,8 @@ void php(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    ram[0x0100 + sp--] = sr;
 	pc += bytes;
 }
 
@@ -731,6 +940,18 @@ void pla(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    sp++;
+    ac = ram[0x0100 + sp];
+
+    if (ac >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (ac == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -741,6 +962,9 @@ void plp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    sp++;
+    sr = ram[0x0100 + sp];
 	pc += bytes;
 }
 
@@ -751,6 +975,26 @@ void rol(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    uint8_t out_carry = (*operand) >> 7;
+    uint8_t in_carry = sr & S_CARRY;
+    *operand = ((*operand) << 1) | in_carry;
+
+    if (out_carry)
+        sr |= S_CARRY;
+    else sr &= ~S_CARRY;
+
+    if ((*operand) >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (*operand == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -761,6 +1005,26 @@ void ror(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    uint8_t out_carry = (*operand) & 1;
+    uint8_t in_carry = sr & S_CARRY;
+    *operand = ((*operand) >> 1) | (in_carry << 7);
+
+    if (out_carry)
+        sr |= S_CARRY;
+    else sr &= ~S_CARRY;
+
+    if (in_carry)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (*operand == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -771,7 +1035,10 @@ void rti(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-	pc += bytes;
+
+    sr = ram[0x0100 + sp++] & 0xCF;
+    pc = (ram[0x0100 + sp + 1] << 8) | ram[0x0100 + sp];
+    sp += 2;
 }
 
 void rts(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -781,7 +1048,9 @@ void rts(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
-	pc += bytes;
+
+	pc = ((ram[0x0100 + sp + 1] << 8) | ram[0x0100 + sp]) + 1;
+    sp += 2;
 }
 
 void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
@@ -877,6 +1146,11 @@ void sta(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    *operand = ac;
 	pc += bytes;
 }
 
@@ -887,6 +1161,11 @@ void stx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+
+    *operand = xr;
 	pc += bytes;
 }
 
@@ -897,6 +1176,11 @@ void sty(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    uint8_t *operand = NULL; bool page_crossed;
+    handle_addressing(mode, &operand, &page_crossed);
+	
+    *operand = yr;
 	pc += bytes;
 }
 
@@ -907,6 +1191,17 @@ void tax(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    xr = ac;
+
+    if (xr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (xr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -917,6 +1212,17 @@ void tay(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    yr = ac;
+    
+    if (yr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (yr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -927,6 +1233,17 @@ void tsx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    xr = sp;
+    
+    if (xr >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (xr == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -937,6 +1254,17 @@ void txa(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    ac = xr;
+
+    if (ac >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (ac == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
@@ -947,6 +1275,8 @@ void txs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+
+    sp = xr;
 	pc += bytes;
 }
 
@@ -957,6 +1287,17 @@ void tya(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	#if DEBUG
 	printf("%s\n", __func__);
 	#endif
+	
+    ac = yr;
+
+    if (ac >> 7)
+        sr |= S_NEGATIVE;
+    else sr &= ~S_NEGATIVE;
+
+    if (ac == 0)
+        sr |= S_ZERO;
+    else sr &= ~S_ZERO;
+
 	pc += bytes;
 }
 
