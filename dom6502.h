@@ -1,7 +1,7 @@
 #ifndef DOM6502_H
 #define DOM6502_H
 
-#define DEBUG 0
+#define DEBUG 1
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -44,6 +44,44 @@ typedef struct instruction {
     uint8_t cycles;
     uint8_t mode;
 } instruction;
+
+#if DEBUG
+void print_asm(const char *function_name, uint8_t mode, uint8_t bytes) {
+    char operand_s[8] = "";
+
+    if (mode == IMM) {
+        sprintf(operand_s, "#$%02X", ram[pc + 1]);
+    }
+    else if (mode == ZP_) {
+        sprintf(operand_s, "$%02X", ram[pc + 1]);
+    }
+    else if (mode == ZPX) {
+        sprintf(operand_s, "$%02X,x", ram[pc + 1]);
+    }
+    else if (mode == ZPY) {
+        sprintf(operand_s, "$%02X,y", ram[pc + 1]);
+    }
+    else if (mode == AB_) {
+        sprintf(operand_s, "$%04X", (ram[pc + 2] << 8) | (ram[pc + 1]));
+    }
+    else if (mode == ABX) {
+        sprintf(operand_s, "$%04X,x", (ram[pc + 2] << 8) | (ram[pc + 1]));
+    }
+    else if (mode == ABY) {
+        sprintf(operand_s, "$%04X,y", (ram[pc + 2] << 8) | (ram[pc + 1]));
+    }
+    else if (mode == REL) {
+        sprintf(operand_s, "$%04X", pc + bytes + (int8_t)ram[pc + 1]);
+    }
+    else if (mode == INX) {
+        sprintf(operand_s, "($%02X,x)", ram[pc + 1]);
+    }
+    else if (mode == INY) {
+        sprintf(operand_s, "($%02X),y", ram[pc + 1]);
+    }
+    printf("%04X - %s %s\n", pc, function_name, operand_s);
+}
+#endif
 
 void print_status() {
     printf("    N V     D I Z C\n");
@@ -144,7 +182,7 @@ void handle_addressing(uint8_t mode, uint8_t **operand, bool *page_crossed) {
 
 void nul(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     #if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 }
 
@@ -154,7 +192,7 @@ void adc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -244,7 +282,7 @@ void and(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -268,7 +306,7 @@ void asl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
         
     uint8_t *operand = NULL; bool page_crossed;
@@ -297,7 +335,7 @@ void bcc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -311,7 +349,7 @@ void bcs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     pc += bytes;
@@ -325,7 +363,7 @@ void beq(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -338,7 +376,7 @@ void bit(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ZP_, AB_
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -368,7 +406,7 @@ void bmi(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -382,7 +420,7 @@ void bne(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -396,7 +434,7 @@ void bpl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -409,7 +447,7 @@ void brk(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -421,7 +459,7 @@ void bvc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     pc += bytes;
@@ -435,7 +473,7 @@ void bvs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     pc += bytes;
@@ -448,7 +486,7 @@ void clc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr &= ~S_CARRY;
@@ -460,7 +498,7 @@ void cld(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr &= ~S_DECIMAL;
@@ -472,7 +510,7 @@ void cli(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr &= ~S_INT_DIS;
@@ -484,7 +522,7 @@ void clv(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr &= ~S_OVERFLOW;
@@ -497,7 +535,7 @@ void cmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -525,7 +563,7 @@ void cpx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMM, ZP_, AB_
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -553,7 +591,7 @@ void cpy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMM, ZP_, AB_
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -581,7 +619,7 @@ void dec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ZP_, ZPX, AB_, ABX
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -605,7 +643,7 @@ void dex(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     xr--;
@@ -626,7 +664,7 @@ void dey(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     yr--;
@@ -648,7 +686,7 @@ void eor(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -672,7 +710,7 @@ void inc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ZP_, ZPX, AB_, ABX
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -696,7 +734,7 @@ void inx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
     
     xr++;
@@ -717,7 +755,7 @@ void iny(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     yr++;
@@ -738,7 +776,7 @@ void jmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: AB_, IN_
 
     #if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     if (mode == IN_) {
@@ -761,7 +799,7 @@ void jsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: AB_
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint16_t _pc = pc + 2;
@@ -777,7 +815,7 @@ void lda(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
     #if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -802,7 +840,7 @@ void ldx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// ABY: 5 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -827,7 +865,7 @@ void ldy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// ABX: 5 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -851,7 +889,7 @@ void lsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -878,7 +916,7 @@ void nop(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -890,7 +928,7 @@ void ora(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -914,7 +952,7 @@ void pha(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     ram[0x0100 + sp--] = ac;
@@ -926,7 +964,7 @@ void php(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     ram[0x0100 + sp--] = sr;
@@ -938,7 +976,7 @@ void pla(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sp++;
@@ -960,7 +998,7 @@ void plp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sp++;
@@ -973,7 +1011,7 @@ void rol(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -1003,7 +1041,7 @@ void ror(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -1033,11 +1071,11 @@ void rti(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr = ram[0x0100 + sp++] & 0xCF;
-    pc = (ram[0x0100 + sp + 1] << 8) | ram[0x0100 + sp];
+    pc = (ram[0x0100 + sp + 2] << 8) | ram[0x0100 + sp + 1];
     sp += 2;
 }
 
@@ -1046,10 +1084,10 @@ void rts(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
-	pc = ((ram[0x0100 + sp + 1] << 8) | ram[0x0100 + sp]) + 1;
+	pc = ((ram[0x0100 + sp + 2] << 8) | ram[0x0100 + sp + 1]) + 1;
     sp += 2;
 }
 
@@ -1059,7 +1097,7 @@ void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// INY: 6 cycles if page crossed
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -1108,7 +1146,7 @@ void sec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr |= S_CARRY;
@@ -1120,7 +1158,7 @@ void sed(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr |= S_DECIMAL;
@@ -1132,7 +1170,7 @@ void sei(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr |= S_INT_DIS;
@@ -1144,7 +1182,7 @@ void sta(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ZP_, ZPX, AB_, ABX, ABY, INX, INY
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -1159,7 +1197,7 @@ void stx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ZP_, ZPY, AB_
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL; bool page_crossed;
@@ -1174,7 +1212,7 @@ void sty(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: ZP_, ZPX, AB_
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL; bool page_crossed;
@@ -1189,7 +1227,7 @@ void tax(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     xr = ac;
@@ -1210,7 +1248,7 @@ void tay(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     yr = ac;
@@ -1231,7 +1269,7 @@ void tsx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     xr = sp;
@@ -1252,7 +1290,7 @@ void txa(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     ac = xr;
@@ -1273,7 +1311,7 @@ void txs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sp = xr;
@@ -1285,7 +1323,7 @@ void tya(uint8_t bytes, uint8_t cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	printf("%s\n", __func__);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     ac = yr;

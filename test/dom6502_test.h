@@ -1026,9 +1026,7 @@ void reset_status() {
 }
 
 void run_6502() {
-    a_brk();
     reset_pc();
-
 	uint8_t *b;
     do {
         b = ram + pc;
