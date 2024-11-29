@@ -1021,12 +1021,21 @@ void reset_pc() {
     pc = start_program;
 }
 
-void reset_status() {
+void reset_cpu() {
+	ac = 0;
+	xr = 0;
+	yr = 0;
+	sp = 0xFF;
 	sr = 0x32;
 }
 
 void run_6502() {
     reset_pc();
+
+	#if DEBUG
+	printf("addr instr     disass        |AC XR YR SP SR|nvdizc|\n");
+	#endif
+	
 	uint8_t *b;
     do {
         b = ram + pc;
