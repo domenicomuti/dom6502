@@ -2,7 +2,9 @@
 #define DOM6502_TEST_H
 
 #include <stdio.h>
+#include <sched.h>
 #include "../dom6502.h"
+#include "../timing.h"
 
 #define COLOR_RESET "\x1B[0m"
 #define COLOR_RED   "\x1B[31m"
@@ -1033,16 +1035,24 @@ void run_6502() {
     reset_pc();
 
 	#if DEBUG
-	printf("addr instr     disass        |AC XR YR SP SR|nvdizc|#\n");
+	printf("addr instr     disass        |AC XR YR SP SR|nvdizc|\n");
 	int cont = 0;
 	#endif
 	
 	uint8_t *b;
     do {
+		suseconds_t a = get_microsec();
+		
         b = ram + pc;
         instruction i = instructions[*b];
         void (*func)() = i.operation;
         func(i.bytes, &i.cycles, i.mode);
+
+		microsleep((i.cycles / SPEED) - (get_microsec() - a));
+
+		/*suseconds_t timing_test = get_microsec() - a;
+		if (timing_test != i.cycles)
+			printf("WRONG TIMING: %ld (%d)\n", timing_test, i.cycles);*/
 
 		#if DEBUG
 		cont++;

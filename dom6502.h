@@ -1,14 +1,18 @@
 #ifndef DOM6502_H
 #define DOM6502_H
 
-#define DEBUG 0
+#define DEBUG 1
+#define SPEED 1   // Mhz
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "timing.h"
 #if DEBUG
 #include <ctype.h>
 #endif
+
+bool irq = false;
 
 uint8_t ram[65536];
 
@@ -49,7 +53,7 @@ typedef struct instruction {
 } instruction;
 
 #if DEBUG
-void print_asm(const char *function_name, uint8_t mode, uint8_t bytes, uint8_t *cycles) {
+void print_asm(const char *function_name, uint8_t mode, uint8_t bytes) {
     char function_name_upper[4] = {0};
     for (int i = 0; i < 3; i++) {
         function_name_upper[i] = toupper(function_name[i]);
@@ -103,15 +107,14 @@ void print_asm(const char *function_name, uint8_t mode, uint8_t bytes, uint8_t *
     }
 
     printf(
-        "|%02X %02X %02X %02X %02X|%d%d%d%d%d%d|%d\n", 
+        "|%02X %02X %02X %02X %02X|%d%d%d%d%d%d|\n", 
         ac, xr, yr, sp, sr,
         ((sr & S_NEGATIVE) >> 7),
         ((sr & S_OVERFLOW) >> 6),
         ((sr & S_DECIMAL) >> 3),
         ((sr & S_INT_DIS) >> 2),
         ((sr & S_ZERO) >> 1),
-        (sr & S_CARRY),
-        *cycles
+        (sr & S_CARRY)
     );
 }
 #endif
@@ -210,8 +213,10 @@ void handle_relative(uint8_t *cycles) {
 }
 
 void nul(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
+    pc += 1;
+
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 }
 
@@ -299,7 +304,7 @@ void adc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     }
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
     
 	pc += bytes;
@@ -324,7 +329,7 @@ void and(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_NEGATIVE;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -352,7 +357,7 @@ void asl(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
     
 	pc += bytes;
@@ -363,13 +368,13 @@ void bcc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
 	pc += bytes;
     if ((sr & S_CARRY) == 0)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void bcs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -377,13 +382,13 @@ void bcs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 	
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
     pc += bytes;
     if (sr & S_CARRY)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void beq(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -391,13 +396,13 @@ void beq(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
 	pc += bytes;
     if (sr & S_ZERO)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void bit(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -423,7 +428,7 @@ void bit(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_NEGATIVE;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -434,13 +439,13 @@ void bmi(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
 	pc += bytes;
     if (sr & S_NEGATIVE)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void bne(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -448,13 +453,13 @@ void bne(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
 	pc += bytes;
     if ((sr & S_ZERO) == 0)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void bpl(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -462,13 +467,13 @@ void bpl(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
 	pc += bytes;
     if ((sr & S_NEGATIVE) == 0)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void brk(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -476,7 +481,7 @@ void brk(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -487,13 +492,13 @@ void bvc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 	
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
     pc += bytes;
     if ((sr & S_OVERFLOW) == 0)
         handle_relative(cycles);
-        
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void bvs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -501,13 +506,13 @@ void bvs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 	
+    #if DEBUG
+	print_asm(__func__, mode, bytes);
+	#endif
+
     pc += bytes;
     if (sr & S_OVERFLOW)
         handle_relative(cycles);
-
-    #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
-	#endif
 }
 
 void clc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
@@ -517,7 +522,7 @@ void clc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -530,7 +535,7 @@ void cld(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr &= ~S_DECIMAL;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -543,7 +548,7 @@ void cli(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr &= ~S_INT_DIS;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -556,7 +561,7 @@ void clv(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr &= ~S_OVERFLOW;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -585,7 +590,7 @@ void cmp(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -613,7 +618,7 @@ void cpx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -641,7 +646,7 @@ void cpy(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -665,7 +670,7 @@ void dec(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -686,7 +691,7 @@ void dex(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -707,7 +712,7 @@ void dey(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
     
 	pc += bytes;
@@ -732,7 +737,7 @@ void eor(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -756,7 +761,7 @@ void inc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
     
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -777,7 +782,7 @@ void inx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -798,7 +803,7 @@ void iny(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -809,7 +814,7 @@ void jmp(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: AB_, IN_
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     if (mode == IN_) {
@@ -836,7 +841,7 @@ void jsr(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     ram[0x0100 + sp--] = _pc & 0x00FF;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     pc = (ram[pc + 2] << 8) | ram[pc + 1];
@@ -861,7 +866,7 @@ void lda(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -886,7 +891,7 @@ void ldx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -911,7 +916,7 @@ void ldy(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -938,7 +943,7 @@ void lsr(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -949,7 +954,7 @@ void nop(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -974,7 +979,7 @@ void ora(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -985,7 +990,7 @@ void pha(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     ram[0x0100 + sp--] = ac;
@@ -999,7 +1004,7 @@ void php(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     ram[0x0100 + sp--] = sr;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1021,7 +1026,7 @@ void pla(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1035,7 +1040,7 @@ void plp(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr = ram[0x0100 + sp];
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1065,7 +1070,7 @@ void rol(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1095,7 +1100,7 @@ void ror(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1106,7 +1111,7 @@ void rti(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     sr = ram[0x0100 + sp++] & 0xCF;
@@ -1121,7 +1126,7 @@ void rts(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sp += 2;
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc = ((ram[0x0100 + sp] << 8) | ram[0x0100 + sp - 1]) + 1;
@@ -1172,7 +1177,7 @@ void sbc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     }
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1185,7 +1190,7 @@ void sec(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr |= S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1198,7 +1203,7 @@ void sed(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr |= S_DECIMAL;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1211,7 +1216,7 @@ void sei(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sr |= S_INT_DIS;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
     
 	pc += bytes;
@@ -1222,7 +1227,7 @@ void sta(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: ZP_, ZPX, AB_, ABX, ABY, INX, INY
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL;
@@ -1237,7 +1242,7 @@ void stx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: ZP_, ZPY, AB_
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 	
     uint8_t *operand = NULL;
@@ -1252,7 +1257,7 @@ void sty(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Modes: ZP_, ZPX, AB_
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
     uint8_t *operand = NULL;
@@ -1277,7 +1282,7 @@ void tax(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1298,7 +1303,7 @@ void tay(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1319,7 +1324,7 @@ void tsx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1340,7 +1345,7 @@ void txa(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1353,7 +1358,7 @@ void txs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     sp = xr;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;
@@ -1374,7 +1379,7 @@ void tya(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes, cycles);
+	print_asm(__func__, mode, bytes);
 	#endif
 
 	pc += bytes;

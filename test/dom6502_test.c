@@ -1,6 +1,9 @@
 #include "dom6502_test.h"
 
 int main() {
+	struct sched_param _sched_param;
+    _sched_param.sched_priority = 99;
+    sched_setscheduler(0, SCHED_FIFO, &_sched_param);
 
 	// start: lda, ldx, ldy
     reset_pc();
