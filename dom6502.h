@@ -49,7 +49,7 @@ typedef struct instruction {
 } instruction;
 
 #if DEBUG
-void print_asm(const char *function_name, uint8_t mode, uint8_t bytes) {
+void print_asm(const char *function_name, uint8_t mode, uint8_t bytes, uint8_t *cycles) {
     char function_name_upper[4] = {0};
     for (int i = 0; i < 3; i++) {
         function_name_upper[i] = toupper(function_name[i]);
@@ -103,34 +103,20 @@ void print_asm(const char *function_name, uint8_t mode, uint8_t bytes) {
     }
 
     printf(
-        "|%02X %02X %02X %02X %02X|%d%d%d%d%d%d|\n", 
+        "|%02X %02X %02X %02X %02X|%d%d%d%d%d%d|%d\n", 
         ac, xr, yr, sp, sr,
         ((sr & S_NEGATIVE) >> 7),
         ((sr & S_OVERFLOW) >> 6),
         ((sr & S_DECIMAL) >> 3),
         ((sr & S_INT_DIS) >> 2),
         ((sr & S_ZERO) >> 1),
-        (sr & S_CARRY)
+        (sr & S_CARRY),
+        *cycles
     );
 }
 #endif
 
-void print_status() {
-    printf("    N V     D I Z C\n");
-    printf(
-        "SR: %d %d %d %d %d %d %d %d\n",
-        (sr >> 7),
-        ((sr >> 6) & 1),
-        ((sr >> 5) & 1),
-        ((sr >> 4) & 1),
-        ((sr >> 3) & 1),
-        ((sr >> 2) & 1),
-        ((sr >> 1) & 1),
-        (sr & 1)
-    );
-}
-
-void handle_addressing(uint8_t mode, uint8_t **operand, bool *page_crossed) {
+void handle_addressing(uint8_t mode, uint8_t **operand, uint8_t *cycles) {
     if (mode == ACC) {
         *operand = &ac;
     }
@@ -170,21 +156,20 @@ void handle_addressing(uint8_t mode, uint8_t **operand, bool *page_crossed) {
         /*  Absolute Indexed addressing, X:
             the effective address is formed by adding the contents of X to the
             address contained in the second and third bytes of the instruction.  */
-        *operand = &ram[((ram[pc + 2] << 8) | (ram[pc + 1])) + xr];
+        uint16_t abs = (ram[pc + 2] << 8) | (ram[pc + 1]);
+        uint16_t abs_i = abs + xr;
+        if ((abs_i >> 8) != (abs >> 8)) (*cycles)++;
+        *operand = &ram[abs_i];
     }
     else if (mode == ABY) {
         /*  Absolute Indexed addressing, Y:
             the effective address is formed by adding the contents of X to the
             address contained in the second and third bytes of the instruction.  */
-        *operand = &ram[((ram[pc + 2] << 8) | (ram[pc + 1])) + yr];
+        uint16_t abs = (ram[pc + 2] << 8) | (ram[pc + 1]);
+        uint16_t abs_i = abs + yr;
+        if ((abs_i >> 8) != (abs >> 8)) (*cycles)++;
+        *operand = &ram[abs_i];
     }
-    //else if (mode == REL) {
-        /*  Relative addressing:
-            the second byte of the instruction becomes the operand which is an "Offset"
-            added to the contents of the lower eight bits of the program counter when
-            the counter is set at the next instruction. The range of the offset is
-            -128 to +127 bytes from the next instruction.  */
-    //}
     else if (mode == INX) {
         /*  Zero Page Indexed Indirect addressing (Indirect X):
             the second byte of the instruction is added to the contents of the X
@@ -199,32 +184,44 @@ void handle_addressing(uint8_t mode, uint8_t **operand, bool *page_crossed) {
     else if (mode == INY) {
         /*  Indirect Indexed addressing (Indirect Y):
             the second byte of the instruction points to a memory location in page zero.
-            The contents of this se location are added to the contents of Y, the
+            The contents of this memory location are added to the contents of Y, the
             result being the low-order eight bits of the effective address.
             The carry from this location is added to the contents of the next page zero
             memory location, the result being the high order eight bits of the effective
             address.  */
         uint8_t z = ram[pc + 1];
-        uint16_t p = ((ram[z + 1] << 8) | ram[z]) + yr;
-        *operand = &ram[p];
+        uint16_t abs = (ram[z + 1] << 8) | ram[z];
+        uint16_t abs_i = abs + yr;
+        if ((abs_i >> 8) != (abs >> 8)) (*cycles)++;
+        *operand = &ram[abs_i];
     }
-
-    *page_crossed = false;
 }
 
-void nul(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void handle_relative(uint8_t *cycles) {
+    /*  Relative addressing:
+        the second byte of the instruction becomes the operand which is an "Offset"
+        added to the contents of the lower eight bits of the program counter when
+        the counter is set at the next instruction. The range of the offset is
+        -128 to +127 bytes from the next instruction.  */
+    (*cycles)++;
+    uint16_t _pc = pc + (int8_t)(ram[pc - 1]);
+    if ((pc >> 8) != (_pc >> 8)) (*cycles)++;
+    pc = _pc;
+}
+
+void nul(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 }
 
-void adc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void adc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Add with Carry
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     uint8_t ac_orig = ac;
     uint8_t carry_orig = (sr & S_CARRY);
@@ -302,19 +299,19 @@ void adc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     }
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
     
 	pc += bytes;
 }
 
-void and(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void and(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Bitwise AND
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     ac &= *operand;
 
@@ -327,18 +324,18 @@ void and(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_NEGATIVE;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void asl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void asl(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Arithmetic Shift Left
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
         
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     if (*operand >> 7)
         sr |= S_CARRY;
@@ -355,60 +352,60 @@ void asl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
     
 	pc += bytes;
 }
 
-void bcc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bcc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Carry Clear
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
-
 	pc += bytes;
     if ((sr & S_CARRY) == 0)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void bcs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bcs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Carry Set
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
-
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
 	
     pc += bytes;
     if (sr & S_CARRY)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void beq(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void beq(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Equal
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
-
 	pc += bytes;
     if (sr & S_ZERO)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void bit(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bit(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Bit Test
 	// Modes: ZP_, AB_
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     uint8_t _ac = ac;
     _ac &= *operand;
@@ -426,152 +423,152 @@ void bit(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_NEGATIVE;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void bmi(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bmi(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Minus
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
-
 	pc += bytes;
     if (sr & S_NEGATIVE)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void bne(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bne(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Not Equal
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
-
 	pc += bytes;
     if ((sr & S_ZERO) == 0)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void bpl(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bpl(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Plus
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
 
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
-
 	pc += bytes;
     if ((sr & S_NEGATIVE) == 0)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void brk(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void brk(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Break (software IRQ)
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void bvc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bvc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Overflow Clear
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
-
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
 	
     pc += bytes;
     if ((sr & S_OVERFLOW) == 0)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+        
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void bvs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void bvs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Branch if Overflow Set
 	// Modes: REL
 	// REL: 3 cycles if branch taken, 4 cycles if page crossed
-
-	#if DEBUG
-	print_asm(__func__, mode, bytes);
-	#endif
 	
     pc += bytes;
     if (sr & S_OVERFLOW)
-        pc += (int8_t)(ram[pc - 1]);
+        handle_relative(cycles);
+
+    #if DEBUG
+	print_asm(__func__, mode, bytes, cycles);
+	#endif
 }
 
-void clc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void clc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Clear Carry
 	// Modes: IMP
 
     sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void cld(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void cld(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Clear Decimal Mode
 	// Modes: IMP
 
     sr &= ~S_DECIMAL;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void cli(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void cli(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Clear Interrupt Disable
 	// Modes: IMP
 
     sr &= ~S_INT_DIS;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void clv(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void clv(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Clear Overflow
 	// Modes: IMP
 
     sr &= ~S_OVERFLOW;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void cmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void cmp(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Compare A
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     uint8_t operation = ac - *operand;
 
@@ -588,18 +585,18 @@ void cmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void cpx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void cpx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Compare X
 	// Modes: IMM, ZP_, AB_
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     int8_t operation = xr - *operand;
 
@@ -616,18 +613,18 @@ void cpx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void cpy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void cpy(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Compare Y
 	// Modes: IMM, ZP_, AB_
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     int8_t operation = yr - *operand;
 
@@ -644,18 +641,18 @@ void cpy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void dec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void dec(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Decrement Memory
 	// Modes: ZP_, ZPX, AB_, ABX
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
     
     (*operand)--;
 
@@ -668,13 +665,13 @@ void dec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void dex(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void dex(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Decrement X
 	// Modes: IMP
 
@@ -689,13 +686,13 @@ void dex(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void dey(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void dey(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Decrement Y
 	// Modes: IMP
 
@@ -710,19 +707,19 @@ void dey(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
     
 	pc += bytes;
 }
 
-void eor(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void eor(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Bitwise Exclusive OR
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     ac ^= *operand;
 
@@ -735,18 +732,18 @@ void eor(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void inc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void inc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Increment Memory
 	// Modes: ZP_, ZPX, AB_, ABX
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
     
     (*operand)++;
 
@@ -759,13 +756,13 @@ void inc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
     
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void inx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void inx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Increment X
 	// Modes: IMP
     
@@ -780,13 +777,13 @@ void inx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void iny(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void iny(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Increment Y
 	// Modes: IMP
 
@@ -801,18 +798,18 @@ void iny(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void jmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void jmp(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Jump
 	// Modes: AB_, IN_
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
     if (mode == IN_) {
@@ -830,7 +827,7 @@ void jmp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else pc = (ram[pc + 2] << 8) | (ram[pc + 1]);
 }
 
-void jsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void jsr(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Jump to Subroutine
 	// Modes: AB_
 
@@ -839,19 +836,19 @@ void jsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     ram[0x0100 + sp--] = _pc & 0x00FF;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
     pc = (ram[pc + 2] << 8) | ram[pc + 1];
 }
 
-void lda(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void lda(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Load A
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
     
     ac = *operand;
 
@@ -864,19 +861,19 @@ void lda(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void ldx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void ldx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Load X
 	// Modes: IMM, ZP_, ZPY, AB_, ABY
 	// ABY: 5 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
     
     xr = *operand;
 
@@ -889,19 +886,19 @@ void ldx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void ldy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void ldy(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Load Y
 	// Modes: IMM, ZP_, ZPX, AB_, ABX
 	// ABX: 5 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
     
     yr = *operand;
 
@@ -914,18 +911,18 @@ void ldy(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void lsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void lsr(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Logical Shift Right
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     uint8_t carry = *operand & 1;
     *operand = (*operand) >> 1;
@@ -941,30 +938,30 @@ void lsr(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void nop(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void nop(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// No Operation
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void ora(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void ora(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Bitwise OR
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     ac |= *operand;
 
@@ -977,38 +974,38 @@ void ora(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void pha(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void pha(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Push A
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
     ram[0x0100 + sp--] = ac;
 	pc += bytes;
 }
 
-void php(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void php(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Push Processor Status
 	// Modes: IMP
 	
     ram[0x0100 + sp--] = sr;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void pla(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void pla(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Pull A
 	// Modes: IMP
 
@@ -1024,13 +1021,13 @@ void pla(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void plp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void plp(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Pull Processor Status
 	// Modes: IMP
 
@@ -1038,18 +1035,18 @@ void plp(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     sr = ram[0x0100 + sp];
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void rol(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void rol(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Rotate Left
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     uint8_t out_carry = (*operand) >> 7;
     uint8_t in_carry = sr & S_CARRY;
@@ -1068,18 +1065,18 @@ void rol(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void ror(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void ror(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Rotate Right
 	// Modes: ACC, ZP_, ZPX, AB_, ABX
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     uint8_t out_carry = (*operand) & 1;
     uint8_t in_carry = sr & S_CARRY;
@@ -1098,18 +1095,18 @@ void ror(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void rti(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void rti(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Return from Interrupt
 	// Modes: IMP
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
     sr = ram[0x0100 + sp++] & 0xCF;
@@ -1117,27 +1114,27 @@ void rti(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     sp += 2;
 }
 
-void rts(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void rts(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Return from Subroutine
 	// Modes: IMP
 
     sp += 2;
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc = ((ram[0x0100 + sp] << 8) | ram[0x0100 + sp - 1]) + 1;
     
 }
 
-void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void sbc(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Subtract with Carry
 	// Modes: IMM, ZP_, ZPX, AB_, ABX, ABY, INX, INY
 	// INY: 6 cycles if page crossed
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
     int8_t operand_i = (int8_t)*operand;
 
     uint8_t carry_orig = (sr & S_CARRY);
@@ -1175,97 +1172,97 @@ void sbc(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     }
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void sec(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void sec(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Set Carry
 	// Modes: IMP
 
     sr |= S_CARRY;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void sed(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void sed(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Set Decimal Mode
 	// Modes: IMP
 
     sr |= S_DECIMAL;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void sei(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void sei(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Set Interrupt Disable
 	// Modes: IMP
 
     sr |= S_INT_DIS;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
     
 	pc += bytes;
 }
 
-void sta(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void sta(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Store A
 	// Modes: ZP_, ZPX, AB_, ABX, ABY, INX, INY
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     *operand = ac;
 	pc += bytes;
 }
 
-void stx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void stx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Store X
 	// Modes: ZP_, ZPY, AB_
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 	
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 
     *operand = xr;
 	pc += bytes;
 }
 
-void sty(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void sty(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Store Y
 	// Modes: ZP_, ZPX, AB_
 
 	#if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
-    uint8_t *operand = NULL; bool page_crossed;
-    handle_addressing(mode, &operand, &page_crossed);
+    uint8_t *operand = NULL;
+    handle_addressing(mode, &operand, cycles);
 	
     *operand = yr;
 	pc += bytes;
 }
 
-void tax(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void tax(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Transfer A to X
 	// Modes: IMP
 
@@ -1280,13 +1277,13 @@ void tax(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void tay(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void tay(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Transfer A to Y
 	// Modes: IMP
 	
@@ -1301,13 +1298,13 @@ void tay(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void tsx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void tsx(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Transfer Stack Pointer to X
 	// Modes: IMP
 
@@ -1322,13 +1319,13 @@ void tsx(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void txa(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void txa(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Transfer X to A
 	// Modes: IMP
 	
@@ -1343,26 +1340,26 @@ void txa(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void txs(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void txs(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Transfer X to Stack Pointer
 	// Modes: IMP
 
     sp = xr;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;
 }
 
-void tya(uint8_t bytes, uint8_t cycles, uint8_t mode) {
+void tya(uint8_t bytes, uint8_t *cycles, uint8_t mode) {
 	// Transfer Y to A
 	// Modes: IMP
 	
@@ -1377,7 +1374,7 @@ void tya(uint8_t bytes, uint8_t cycles, uint8_t mode) {
     else sr &= ~S_ZERO;
 
     #if DEBUG
-	print_asm(__func__, mode, bytes);
+	print_asm(__func__, mode, bytes, cycles);
 	#endif
 
 	pc += bytes;

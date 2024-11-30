@@ -302,8 +302,6 @@ int main() {
 	assert_reg_equals(&ac, 0x54, "decimal mode adc [10a]");
 	assert_reg_equals(&sr, 0xB9, "decimal mode adc [10b]");*/
 
-	return 0;
-
 	reset_pc();
 	reset_cpu();
 	a_sed();

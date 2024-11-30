@@ -22,7 +22,7 @@ int main(uint8_t bytes, uint8_t cycles, uint8_t mode) {
         instruction i = instructions[*b];
 
         void (*func)() = i.operation;
-        func(i.bytes, i.cycles, i.mode);
+        func(i.bytes, &i.cycles, i.mode);
     }
 
     return 0;

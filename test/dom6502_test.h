@@ -1033,7 +1033,8 @@ void run_6502() {
     reset_pc();
 
 	#if DEBUG
-	printf("addr instr     disass        |AC XR YR SP SR|nvdizc|\n");
+	printf("addr instr     disass        |AC XR YR SP SR|nvdizc|#\n");
+	int cont = 0;
 	#endif
 	
 	uint8_t *b;
@@ -1041,8 +1042,16 @@ void run_6502() {
         b = ram + pc;
         instruction i = instructions[*b];
         void (*func)() = i.operation;
-        func(i.bytes, i.cycles, i.mode);
+        func(i.bytes, &i.cycles, i.mode);
+
+		#if DEBUG
+		cont++;
+		#endif
 	} while (*b != 0);
+
+	#if DEBUG
+	printf("%d instructions\n", cont);
+	#endif
 }
 
 void assert_reg_equals(uint8_t *reg, uint8_t value, char *test_name) {
